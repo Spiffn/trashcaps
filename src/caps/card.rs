@@ -1,4 +1,5 @@
 use std::fmt;
+use std::convert;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Suit {
@@ -35,5 +36,33 @@ impl fmt::Display for Card {
 impl Card {
   pub fn new(rank: i64, suit: Suit) -> Self {
     Self { rank, suit }
+  }
+
+  pub fn tryfrom<S>(s: S) -> Result<Self, ()>
+  where S: convert::AsRef<str>
+  {
+    //must be in the form '<rank><suit>'
+    // suit can be unicode or first character (i.e. 13C or 1♠)
+    unimplemented!();
+    let each_char = s.as_ref().trim().chars();
+    let rank_c = each_char.next().ok_or(())?;
+    let suit_c = each_char.next().ok_or(())?;
+    if each_char.next().is_none() {
+      if !rank_c.is_ascii_digit() {
+        return Err(());
+      }
+
+      let rank = (rank_c.to_digit().ok_or(())?) as i64;
+      let suit = match suit_c {
+        'S' | '♠' => Suit::Spades,
+        'H' | '♥' => Suit::Hearts,
+        'C' | '♣' => Suit::Clubs,
+        'D' | '♦' => Suit::Diamonds,
+        _ => return Err(()),
+      };
+      Ok(Self::new(rank, suit))
+    } else {
+      Err(())
+    }
   }
 }

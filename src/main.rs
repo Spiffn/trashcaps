@@ -1,31 +1,23 @@
 mod caps;
 mod collection;
-mod game;
 mod ui;
 
-use caps::card::Suit;
-use caps::deck::Deck;
-use game::Player;
+use caps::game::Game;
 
 fn main() {
-  let mut players = [
-    Player::new("Lawrence"),
-    Player::new("Timothy"),
-    Player::new("James"),
-  ];
-  let suits = [Suit::Spades, Suit::Hearts, Suit::Clubs, Suit::Diamonds];
+  const PLAYERS: [&str; 3] = ["Lawrence", "Timothy", "James"];
 
+  let game = Game::init(&PLAYERS).expect("Error initializing Game!");
+  let mut turn = 0u32;
   loop {
-    game::deal(&mut players[..], Deck::from_range(1..14, &suits[..]));
-    println!("Current Players: ");
-
-    for player in players.iter() {
-      println!("  {}", player);
-    }
-
+    println!("TURN {}", turn);
+    println!("=======");
+    print!("{}", game);
     if !ui::yesno("Continue?").expect("IO Error") {
       println!("Goodbye!");
       break;
     }
+
+    turn += 1;
   }
 }

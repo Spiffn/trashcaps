@@ -1,4 +1,5 @@
 use std::io::{self, ErrorKind};
+use std::ops;
 
 pub fn scan() -> io::Result<String> {
   let mut buffer = String::new();
@@ -17,15 +18,16 @@ pub fn yesno(text: &str) -> io::Result<bool> {
   Ok(response == "Y" || response == "YES")
 }
 
-pub fn selection(text: &str, range: R) -> io::Result<u8>
-  where R: RangeBounds<u8>
+pub fn selection<R>(text: &str, range: R) -> io::Result<u8>
+where
+  R: ops::RangeBounds<u8>,
 {
   println!("{}", text);
   println!("Please choose one:");
   let res = (scan()?).trim().parse::<u8>();
   if res.is_ok() {
-    res
+    Ok(res.unwrap())
   } else {
-    Err(io::Error(ErrorKind::InvalidInput, "Invalid Selection"))
+    Err(io::Error::new(ErrorKind::InvalidInput, "Invalid Selection"))
   }
 }

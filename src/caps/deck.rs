@@ -1,5 +1,5 @@
 use rand::seq::SliceRandom;
-use std::convert::{AsMut, AsRef};
+use std::convert::AsRef;
 use std::fmt;
 use std::ops;
 
@@ -33,12 +33,6 @@ impl fmt::Display for Deck {
 impl AsRef<[Card]> for Deck {
   fn as_ref(&self) -> &[Card] {
     self.0.as_ref()
-  }
-}
-
-impl AsMut<[Card]> for Deck {
-  fn as_mut(&mut self) -> &mut [Card] {
-    self.0.as_mut()
   }
 }
 
@@ -102,12 +96,6 @@ impl AsRef<[Card]> for Hand {
   }
 }
 
-impl AsMut<[Card]> for Hand {
-  fn as_mut(&mut self) -> &mut [Card] {
-    self.0.as_mut()
-  }
-}
-
 impl CardCollection<Card> for Hand {
   fn put(&mut self, card: Card) {
     self.0.push(card);
@@ -121,10 +109,10 @@ impl CardCollection<Card> for Hand {
 
 impl fmt::Display for Hand {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let cnt = self.as_ref().len();
+    let cnt = self.0.len();
     write!(f, "[")?;
     let enumiter = self
-      .as_ref()
+      .0
       .iter()
       .enumerate()
       .map(|idxelem| (idxelem.0, idxelem.1.to_string()));
@@ -141,9 +129,21 @@ impl fmt::Display for Hand {
 }
 
 impl Hand {
+  pub fn new() -> Self {
+    Self(Vec::new())
+  }
+
+  pub fn has(&self, card: &Card) -> bool {
+    self.pos(card).is_some()
+  }
+
   pub fn play(&mut self, rank: i64, suit: Suit) -> Option<Card> {
     let card = Card::new(rank, suit);
-    let res = self.0.binary_search(&card);
-    res.ok().map(|idx| self.0.remove(idx))
+    let res = self.pos(&card);
+    res.map(|idx| self.0.remove(idx))
+  }
+
+  fn pos(&self, card: &Card) -> Option<usize> {
+    self.0.binary_search(card).ok()
   }
 }
