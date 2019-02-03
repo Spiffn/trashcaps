@@ -1,5 +1,6 @@
 use std::fmt;
 use std::convert;
+use regex::Regex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Suit {
@@ -21,7 +22,7 @@ impl fmt::Display for Suit {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Card {
   suit: Suit,
   rank: i64,
@@ -43,26 +44,23 @@ impl Card {
   {
     //must be in the form '<rank><suit>'
     // suit can be unicode or first character (i.e. 13C or 1♠)
-    unimplemented!();
-    let each_char = s.as_ref().trim().chars();
-    let rank_c = each_char.next().ok_or(())?;
-    let suit_c = each_char.next().ok_or(())?;
-    if each_char.next().is_none() {
-      if !rank_c.is_ascii_digit() {
-        return Err(());
-      }
+    let re = Regex::new(r"^\s*(\d+)([shcdSHCD♠♥♣♦])\s*$")
+      .expect("Invalid Regex!");
+    let captures = re.captures(s.as_ref()).ok_or(())?;
+    let rank_match = captures.get(1).ok_or(())?;
+    let suit_match = captures.get(2).ok_or(())?;
 
-      let rank = (rank_c.to_digit().ok_or(())?) as i64;
-      let suit = match suit_c {
-        'S' | '♠' => Suit::Spades,
-        'H' | '♥' => Suit::Hearts,
-        'C' | '♣' => Suit::Clubs,
-        'D' | '♦' => Suit::Diamonds,
-        _ => return Err(()),
-      };
-      Ok(Self::new(rank, suit))
-    } else {
-      Err(())
-    }
+    let rank_str = rank_match.as_str();
+    let suit_str = suit_match.as_str();
+
+    let rank: i64 = rank_str.parse().map_err(|_| ())?;
+    let suit: Suit = match suit_str {
+      "S" | "♠" => Suit::Spades,
+      "H" | "♥" => Suit::Hearts,
+      "C" | "♣" => Suit::Clubs,
+      "D" | "♦" => Suit::Diamonds,
+      _ => return Err(()),
+    };
+    Ok(Self::new(rank, suit))
   }
 }

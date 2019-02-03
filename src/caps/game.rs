@@ -5,6 +5,63 @@ use std::convert;
 use std::fmt;
 
 #[derive(Debug)]
+struct Event {
+  pub name: &str,
+}
+
+#[derive(Debug)]
+struct CardEvent {
+  pub name: &str,
+  pub cards: &[Card],
+}
+
+#[derive(Debug)]
+struct StatusEvent {
+  pub name: &str,
+  pub rank: Ranking,
+}
+
+#[derive(Debug)]
+struct ExchangeEvent {
+  pub offer: &str,
+  pub receiver: &str,
+}
+
+#[derive(Debug)]
+enum GameEvent {
+  Start,
+  Invalid(Event),
+  Play(CardEvent), //regular play
+  Complete(CardEvent), //that is, completion
+  Bomb(Event),
+  Finish(StatusEvent), //player's play ends them with no cards
+  RoundFinish, //all players have finished
+  StartPick,
+  Pick(CardEvent), //player has picked a deck
+  StartExchange(ExchangeEvent),
+  Offer(Event), //lower-status -> higher-status
+  Receive(Event), //higher status ACK lower-status offer
+}
+
+impl fmt::Display for GameEvent {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Invalid(player) => writeln!("{}'s play is invalid!", player),
+      Play(CardEvent) => writeln!(""), //regular play
+      Complete(CardEvent), //that is, completion
+      Bomb(Event),
+      Finish(StatusEvent), //player's play ends them with no cards
+      RoundFinish, //all players have finished
+      StartPick,
+      Pick(CardEvent), //player has picked a deck
+      StartOffer
+      Offer(ExchangeEvent), //lower-status -> higher-status
+      Exchange(ExchangeEvent), //higher status ACK lower-status offer
+    }
+  }
+}
+
+#[derive(Debug)]
 enum GameState {
   Turn(usize),
   Pick(usize),
@@ -12,7 +69,7 @@ enum GameState {
   Exchange(usize, usize), //Higher rank conducting exchange (Scum, President)
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Ranking {
   President,
   VicePresident,
@@ -27,7 +84,11 @@ impl fmt::Display for Ranking {
   }
 }
 
-pub type GameResult = Result<(), String>;
+#[derive(Debug)]
+pub enum GameStatOpt {
+  Player(usize),
+  GameState,
+}
 
 #[derive(Debug)]
 pub struct Game<'players, S: convert::AsRef<str>> {
@@ -85,8 +146,15 @@ where
 impl<'players, S> Game<'players, S>
 where
   S: convert::AsRef<str>,
-{
-  pub fn play(player: S, cards: &[S]) -> GameResult {
+{ 
+  pub fn restart(&mut self) {
+  }
+
+  //get current game state as String
+  pub fn stat(&self) -> String {
+  }
+
+  pub fn play(&mut self, player: &str, cards: &[&str]) -> Vec<String> {
     unimplemented!();
   }
 
