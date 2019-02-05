@@ -6,24 +6,24 @@ use std::fmt;
 
 #[derive(Debug)]
 struct Event {
-  pub name: &str,
+  pub player: &str,
 }
 
 #[derive(Debug)]
 struct CardEvent {
-  pub name: &str,
-  pub cards: &[Card],
+  pub player: &str,
+  pub cards: Deck,
 }
 
 #[derive(Debug)]
 struct StatusEvent {
-  pub name: &str,
+  pub player: &str,
   pub rank: Ranking,
 }
 
 #[derive(Debug)]
 struct ExchangeEvent {
-  pub offer: &str,
+  pub giver: &str,
   pub receiver: &str,
 }
 
@@ -32,6 +32,7 @@ enum GameEvent {
   Start,
   Invalid(Event),
   Play(CardEvent), //regular play
+  Skip(Event),
   Complete(CardEvent), //that is, completion
   Bomb(Event),
   Finish(StatusEvent), //player's play ends them with no cards
@@ -46,17 +47,37 @@ enum GameEvent {
 impl fmt::Display for GameEvent {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      Invalid(player) => writeln!("{}'s play is invalid!", player),
-      Play(CardEvent) => writeln!(""), //regular play
-      Complete(CardEvent), //that is, completion
-      Bomb(Event),
-      Finish(StatusEvent), //player's play ends them with no cards
-      RoundFinish, //all players have finished
-      StartPick,
-      Pick(CardEvent), //player has picked a deck
-      StartOffer
-      Offer(ExchangeEvent), //lower-status -> higher-status
-      Exchange(ExchangeEvent), //higher status ACK lower-status offer
+      Invalid(evt) => write!(f, "{}'s play is invalid!", evt.player),
+      Play(card_evt) => {
+        write!(f, "{} plays {}", card_evt.player, card_evt.cards)
+      },
+      Complete(card_evt) => {
+        write!(f, "{} completes with {}", card_evt.player, card_evt.cards)
+      },
+      Bomb(evt) => {
+        write!(f, "{} bombs", evt.player)
+      },
+      Finish(stat_evt) {
+        write!(f, "{} has cleared their hand as {}",
+          stat_evt.player,
+          stat_evt.rank)
+      },
+      RoundFinish => write!(f, "Round Finished!"), //all players have finished
+      StartPick => write!(f, "Pick Stage Start!"),
+      Pick(card_evt) => {
+        write!(f, "{} has picked deck {}", card_evt.player, card_evt.cards)
+      },
+      StartOffer => write!(f, "Offer Stage Start!")
+      Offer(x_evt) {
+        write!(f, "{} has offered cards to {}",
+          card_evt.giver, 
+          card_evt.receiver)
+      },
+      Exchange(x_evt) {
+        write!(f, "{} has accepted the exchange with {}",
+          card_evt.receiver,
+          card_evt.giver)
+      },
     }
   }
 }
@@ -80,13 +101,17 @@ enum Ranking {
 
 impl fmt::Display for Ranking {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{:?}", self)
+    match self {
+      Ranking::VicePresident => write!(f, "Vice President"),
+      Ranking::ViceScum => write!(f, "Vice Scum"),
+      _ => write!(f, "{:?}", self),
+    }
   }
 }
 
 #[derive(Debug)]
 pub enum GameStatOpt {
-  Player(usize),
+  Players,
   GameState,
 }
 
@@ -97,6 +122,7 @@ pub struct Game<'players, S: convert::AsRef<str>> {
   ranking: Vec<Ranking>,
   state: GameState,
   pile: Deck,
+  events: Vec<GameEvent>,
 }
 
 impl<'players, S> fmt::Display for Game<'players, S>
@@ -147,11 +173,15 @@ impl<'players, S> Game<'players, S>
 where
   S: convert::AsRef<str>,
 { 
-  pub fn restart(&mut self) {
+  pub fn start(&mut self) {
   }
 
   //get current game state as String
-  pub fn stat(&self) -> String {
+  pub fn stat(&self, opt: GameStatOpt) -> String {
+    match opt {
+      GameStatOpt::Players => self.stat_players(),
+      GameStatOpt::GameState => self.stat_gamestate(),
+    }
   }
 
   pub fn play(&mut self, player: &str, cards: &[&str]) -> Vec<String> {
@@ -204,15 +234,5 @@ where
       state: GameState::Turn(starting.expect("3 of Clubs wasn't generated!")),
       pile: Deck::empty(),
     })
-  }
-
-  fn current_player(&self) -> String {
-    let idx = match self.state {
-      GameState::Turn(idx) => idx,
-      GameState::Pick(idx) => idx,
-      GameState::Offer(giver_i, _) => giver_i,
-      GameState::Exchange(_, taker_i) => taker_i,
-    };
-    String::from(self.players[idx].as_ref())
   }
 }
