@@ -1,14 +1,14 @@
 use std::io::{self, ErrorKind};
 use std::ops;
 
-pub fn scan() -> io::Result<String> {
+fn scan() -> io::Result<String> {
   let mut buffer = String::new();
   io::stdin().read_line(&mut buffer)?;
   Ok(buffer)
 }
 
 pub fn prompt(text: &str) -> io::Result<String> {
-  println!("{}", text);
+  print!("{}", text);
   scan()
 }
 

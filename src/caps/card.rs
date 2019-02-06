@@ -1,6 +1,6 @@
-use std::fmt;
-use std::convert;
 use regex::Regex;
+use std::convert;
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Suit {
@@ -40,7 +40,8 @@ impl Card {
   }
 
   pub fn tryfrom<S>(s: S) -> Result<Self, ()>
-  where S: convert::AsRef<str>
+  where
+    S: convert::AsRef<str>,
   {
     //must be in the form '<rank><suit>'
     // suit can be unicode or first character (i.e. 13C or 1♠)

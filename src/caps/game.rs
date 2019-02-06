@@ -5,87 +5,84 @@ use std::convert;
 use std::fmt;
 
 #[derive(Debug)]
-struct Event {
-  pub player: &str,
+struct Event<'evt> {
+  pub player: &'evt str,
 }
 
 #[derive(Debug)]
-struct CardEvent {
-  pub player: &str,
+struct CardEvent<'cevt> {
+  pub player: &'cevt str,
   pub cards: Deck,
 }
 
 #[derive(Debug)]
-struct StatusEvent {
-  pub player: &str,
+struct StatusEvent<'sevt> {
+  pub player: &'sevt str,
   pub rank: Ranking,
 }
 
 #[derive(Debug)]
-struct ExchangeEvent {
-  pub giver: &str,
-  pub receiver: &str,
+struct ExchangeEvent<'xevt> {
+  pub giver: &'xevt str,
+  pub receiver: &'xevt str,
 }
 
 #[derive(Debug)]
-enum GameEvent {
+enum GameEvent<'evt> {
   Start,
-  Invalid(Event),
-  Play(CardEvent), //regular play
-  Skip(Event),
-  Complete(CardEvent), //that is, completion
-  Bomb(Event),
-  Finish(StatusEvent), //player's play ends them with no cards
-  RoundFinish, //all players have finished
+  Invalid(Event<'evt>),
+  Play(CardEvent<'evt>), //regular play
+  Skip(Event<'evt>),
+  Complete(CardEvent<'evt>), //that is, completion
+  Bomb(Event<'evt>),
+  Finish(StatusEvent<'evt>), //player's play ends them with no cards
+  RoundFinish,               //all players have finished
   StartPick,
-  Pick(CardEvent), //player has picked a deck
-  StartExchange(ExchangeEvent),
-  Offer(Event), //lower-status -> higher-status
-  Receive(Event), //higher status ACK lower-status offer
+  Pick(CardEvent<'evt>), //player has picked a deck
+  StartExchange,
+  Offer(ExchangeEvent<'evt>), //lower-status -> higher-status
+  Exchange(ExchangeEvent<'evt>),
 }
 
-impl fmt::Display for GameEvent {
+impl<'evt> fmt::Display for GameEvent<'evt> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      Start => write!(f, "Game time started!"),
-      Invalid(evt) => write!(f, "{}'s play is invalid!", evt.player),
-      Play(card_evt) => {
+      GameEvent::Start => write!(f, "Game time started!"),
+      GameEvent::Invalid(evt) => write!(f, "{}'s play is invalid!", evt.player),
+      GameEvent::Play(card_evt) => {
         write!(f, "{} plays {}", card_evt.player, card_evt.cards)
-      },
-      Complete(card_evt) => {
+      }
+      GameEvent::Skip(evt) => write!(f, "{} Skipped!", evt.player),
+      GameEvent::Complete(card_evt) => {
         write!(f, "{} completes with {}", card_evt.player, card_evt.cards)
-      },
-      Bomb(evt) => {
-        write!(f, "{} bombs", evt.player)
-      },
-      Finish(stat_evt) {
-        write!(f, "{} has cleared their hand as {}",
-          stat_evt.player,
-          stat_evt.rank)
-      },
-      RoundFinish => write!(f, "Round Finished!"), //all players have finished
-      StartPick => write!(f, "Pick Stage Start!"),
-      Pick(card_evt) => {
+      }
+      GameEvent::Bomb(evt) => write!(f, "{} bombs", evt.player),
+      GameEvent::Finish(stat_evt) => write!(
+        f,
+        "{} has cleared their hand as {}",
+        stat_evt.player, stat_evt.rank
+      ),
+      GameEvent::RoundFinish => write!(f, "Round Finished!"),
+      GameEvent::StartPick => write!(f, "Pick Stage Start!"),
+      GameEvent::Pick(card_evt) => {
         write!(f, "{} has picked deck {}", card_evt.player, card_evt.cards)
-      },
-      StartOffer => write!(f, "Offer Stage Start!")
-      Offer(x_evt) {
-        write!(f, "{} has offered cards to {}",
-          card_evt.giver, 
-          card_evt.receiver)
-      },
-      Exchange(x_evt) {
-        write!(f, "{} has accepted the exchange with {}",
-          card_evt.receiver,
-          card_evt.giver)
-      },
+      }
+      GameEvent::StartExchange => write!(f, "Exchange stage Start!"),
+      GameEvent::Offer(x_evt) => {
+        write!(f, "{} has offered cards to {}", x_evt.giver, x_evt.receiver)
+      }
+      GameEvent::Exchange(x_evt) => write!(
+        f,
+        "{} has accepted the exchange with {}",
+        x_evt.receiver, x_evt.giver
+      ),
     }
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
-  Start, //rankings are undetermined, deal equally and start with 3 of clubs
+  Start,   //rankings are undetermined, deal equally and start with 3 of clubs
   Restart, //rankings were determined, President first
   Turn(usize),
   Pick(usize),
@@ -125,29 +122,43 @@ pub struct Game<'players, S: convert::AsRef<str>> {
   ranking: Vec<Ranking>,
   state: GameState,
   pile: Deck,
-  events: Vec<GameEvent>,
+  events: Vec<GameEvent<'players>>,
 }
 
 impl<'players, S> Game<'players, S>
 where
   S: convert::AsRef<str>,
-{ 
+{
+  pub fn is_over(&self) -> bool {
+    self.state == GameState::Restart
+  }
+
+  pub fn get_current_player(&self) -> Option<&'players str> {
+    match self.state {
+      GameState::Turn(idx)
+      | GameState::Pick(idx)
+      | GameState::Offer(idx, _)
+      | GameState::Exchange(_, idx) => Some(self.players[idx].as_ref()),
+      _ => None,
+    }
+  }
+
   pub fn start(&mut self) -> Result<Vec<String>, String> {
     match self.state {
-      GameState::InitialStart => {
+      GameState::Start => {
         self.events.push(GameEvent::Start);
         let first_player_i = self.initial_deal();
         self.state = GameState::Turn(first_player_i);
-      },
+      }
       GameState::Restart => {
         self.events.push(GameEvent::StartPick);
         let pres_i = self
           .ranking
           .iter()
-          .position(|rank| rank == Ranking::President)
+          .position(|&rank| rank == Ranking::President)
           .expect("Anarchy! No Presidents!");
         self.state = GameState::Pick(pres_i);
-      },
+      }
       _ => return Err(String::from("Can't call start() at this time")),
     }
     Ok(self.flush_events())
@@ -161,7 +172,11 @@ where
     }
   }
 
-  pub fn play(&mut self, player: &str, cards: &[&str]) -> Vec<String> {
+  pub fn play(
+    &mut self,
+    player: &str,
+    cards: &[&str],
+  ) -> Result<Vec<String>, String> {
     unimplemented!();
   }
 
@@ -188,36 +203,36 @@ where
       players,
       hands,
       ranking,
-      state: GameState::InitialStart,
-      pile: Deck::from_range(1..14,&suits),
+      state: GameState::Start,
+      pile: Deck::from_range(1..14, &suits),
       events: Vec::new(),
     })
   }
 
   fn stat_gamestate(&self) -> String {
     match self.state {
+      GameState::Start => String::from("Game has yet to begin."),
+      GameState::Restart => String::from("Game awaiting restart"),
       GameState::Turn(idx) => {
-        format!(f, "It's {}'s Turn.", self.players[idx])
+        format!("It's {}'s Turn.", self.players[idx].as_ref())
       }
-      GameState::Pick(idx) => {
-        format!("{} {} is Picking.", self.ranking[idx], self.players[idx])
-      }
-      GameState::Offer(giver_i, taker_i) => {
-        format!(
-          "Waiting on {}'s offer between {} and {}.",
-          self.ranking[giver_i],
-          self.players[giver_i],
-          self.players[taker_i]
-        )
-      }
-      GameState::Exchange(giver_i, taker_i) => {
-        format!(
-          "Waiting on {}'s exchange between {} and {}.",
-          self.ranking[taker_i],
-          self.players[giver_i],
-          self.players[taker_i]
-        )
-      }
+      GameState::Pick(idx) => format!(
+        "{} {} is Picking.",
+        self.ranking[idx],
+        self.players[idx].as_ref()
+      ),
+      GameState::Offer(giver_i, taker_i) => format!(
+        "Waiting on {}'s offer between {} and {}.",
+        self.ranking[giver_i],
+        self.players[giver_i].as_ref(),
+        self.players[taker_i].as_ref()
+      ),
+      GameState::Exchange(giver_i, taker_i) => format!(
+        "Waiting on {}'s exchange between {} and {}.",
+        self.ranking[taker_i],
+        self.players[giver_i].as_ref(),
+        self.players[taker_i].as_ref()
+      ),
     }
   }
 
@@ -227,7 +242,9 @@ where
       .iter()
       .zip(self.hands.iter())
       .zip(self.ranking.iter())
-      .map(|((name, hand), rank)| format!("  {} ({}): {}", name, rank, hand))
+      .map(|((name, hand), rank)| {
+        format!("  {} ({}): {}", name.as_ref(), rank, hand)
+      })
       .fold(String::new(), |s, player| format!("{}\n{}", s, player))
   }
 
@@ -246,9 +263,10 @@ where
     let leftovers = num_cards % num_players;
 
     //add deck to hands
-    self.hands.iter_mut().for_each(|h| {
+    let hands_iter = self.hands.iter_mut();
+    for h in hands_iter {
       h.add(self.pile.deal(chunks).expect("Ran out of chunks!"));
-    });
+    }
 
     //add leftovers
     (0..leftovers).for_each(|i| {
@@ -257,6 +275,10 @@ where
 
     //find first player
     let start_card = Card::new(3, Suit::Clubs);
-    self.hands.iter().position(|h| h.has(&start_card)).expect("No 3 of Clubs!");
+    self
+      .hands
+      .iter()
+      .position(|h| h.has(&start_card))
+      .expect("No 3 of Clubs!")
   }
 }
