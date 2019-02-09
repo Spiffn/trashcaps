@@ -2,6 +2,8 @@ use rand::seq::SliceRandom;
 use std::convert::AsRef;
 use std::fmt;
 use std::ops;
+use std::iter;
+use std::vec;
 
 use super::card::{Card, Suit};
 use crate::collection::CardCollection;
@@ -45,10 +47,26 @@ impl CardCollection<Card> for Deck {
   }
 }
 
+impl iter::IntoIterator for Deck {
+  type Item = Card;
+  type IntoIter = vec::IntoIter<Self::Item>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    self.0.into_iter()
+  }
+}
+
+impl iter::FromIterator<CardCollection<Card>> for Deck {
+  fn from_iter<I: IntoIterator<Item=CardCollection<Card>>>(iter: I) -> Self {
+    iter.fold(Deck::new(), |mut d, other| d.add(other))
+  }
+}
+
 impl Deck {
-  pub fn empty() -> Self {
+  pub fn new() -> Self {
     Self(Vec::new())
   }
+
   //given rank range and collection of suits, return a shuffled Deck
   //of combinatorial cards of all possible ranks and suits
   pub fn from_range(ranks: ops::Range<i64>, suits: &[Suit]) -> Self {
@@ -64,6 +82,14 @@ impl Deck {
 
   pub fn len(&self) -> usize {
     self.0.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.0.is_empty()
+  }
+
+  pub fn top(&self) -> Option<&Card> {
+    self.0.last()
   }
 
   pub fn draw(&mut self) -> Option<Card> {
