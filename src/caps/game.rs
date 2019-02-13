@@ -1,9 +1,11 @@
 use super::card::{Card, Suit};
 use super::deck::{Deck, Hand};
-use super::event::GameEvent;
-use crate::collection::CardCollection;
+use super::repl::{Repl, self};
+use crate::impl::collection::CardCollection;
+use crate::impl::game;
 use std::convert;
 use std::fmt;
+use std::opt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
@@ -41,6 +43,10 @@ pub enum GameStatOpt {
 }
 
 #[derive(Debug)]
+pub enum GameStatRes {
+}
+
+#[derive(Debug)]
 pub struct Game<'players, S: convert::AsRef<str>> {
   players: &'players [S],
   hands: Vec<Hand>,
@@ -48,6 +54,18 @@ pub struct Game<'players, S: convert::AsRef<str>> {
   state: GameState,
   pile: Deck,
   events: Vec<GameEvent<'players>>,
+}
+
+impl<'players, S> Iterator for Game<'players, S> {
+  fn next(&mut self) -> Option<Self::Item> {
+    unimplemented!();
+  }
+}
+
+impl<'players, S> game::Game for Game<'players, S> {
+  type Turn: Repl;
+  type StatOpt: GameStatOpt;
+  type StatOut: 
 }
 
 impl<'players, S> Game<'players, S>

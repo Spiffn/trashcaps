@@ -1,4 +1,46 @@
+use super::card::Deck;
+use super::game::Ranking;
+use crate::impl::game;
 use std::fmt;
+
+pub struct Repl {
+  events: Vec<GameEvent>,
+  next_input: GameInput,
+}
+
+impl game::Repl for Repl {
+  type Event = GameEvent;
+  type Input = GameInput;
+
+  fn events(&self) -> &[Event] {
+    &self.events[..]
+  }
+
+  fn input(&self) -> Input {
+    self.next_input
+  }
+}
+
+impl Repl {
+  pub fn new(events: Vec<GameEvent>, next_input: GameInput) -> Self {
+    Self { events, next_input }
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameInput {
+  PlayCard, //play card
+  SelectPile, //Select piles
+}
+
+impl fmt::Display for GameInput {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      GameInput::PlayCard => write!(f, "Play a Card"),
+      GameInput::SelectPile => write!(f, "Select a Pile"),
+    }
+  }
+}
 
 #[derive(Debug)]
 struct Event<'evt> {
@@ -72,6 +114,15 @@ impl<'evt> fmt::Display for GameEvent<'evt> {
         "{} has accepted the exchange with {}",
         x_evt.receiver, x_evt.giver
       ),
+    }
+  }
+}
+
+impl<'evt> game::GameEvent for GameEvent<'evt> {
+  fn is_over(&self) -> bool {
+    match self {
+      GameEvent::RoundFinish => true,
+      _ => false
     }
   }
 }
