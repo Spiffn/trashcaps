@@ -1,5 +1,7 @@
-mod caps;
-mod collection;
+mod card;
+mod deck;
+mod event;
+mod game;
 mod ui;
 
 use caps::game::{Game, GameStatOpt};

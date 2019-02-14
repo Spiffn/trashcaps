@@ -6,7 +6,20 @@ use std::iter;
 use std::vec;
 
 use super::card::{Card, Suit};
-use crate::collection::CardCollection;
+
+//this trait defines CardCollection as compatible with all other CardCollections
+//assuming that the card C is the same.
+//to_vec is just there so an auto impl drain() is possible.
+pub trait CardCollection<C>: AsRef<[C]> {
+  fn put(&mut self, card: C); //add card to collection
+  fn to_vec(self) -> Vec<C>;
+
+  fn add(&mut self, other: impl CardCollection<C>) {
+    for card in other.to_vec().drain(..) {
+      self.put(card);
+    }
+  }
+}
 
 #[derive(Debug)]
 pub struct Deck(Vec<Card>);
@@ -56,9 +69,16 @@ impl iter::IntoIterator for Deck {
   }
 }
 
+//merges all CardCollection objects into a Deck
 impl iter::FromIterator<CardCollection<Card>> for Deck {
   fn from_iter<I: IntoIterator<Item=CardCollection<Card>>>(iter: I) -> Self {
     iter.fold(Deck::new(), |mut d, other| d.add(other))
+  }
+}
+
+impl iter::FromIterator<Card> for Deck {
+  fn from_iter<I: IntoIterator<Item=Card>>(iter: I) -> Self {
+    iter.fold(Deck::new(), |mut d, c| d.put(c))
   }
 }
 
@@ -113,6 +133,8 @@ impl Deck {
   }
 }
 
+//A strictly ordered set of Cards for easy searching.
+//Use Deck if order doesn't matter.
 #[derive(Debug)]
 pub struct Hand(Vec<Card>);
 
@@ -154,6 +176,12 @@ impl fmt::Display for Hand {
   }
 }
 
+impl iter::FromIterator<Card> for Hand {
+  fn from_iter<I: IntoIterator<Item=Card>>(iter: I) -> Self {
+    iter.fold(Hand::new(), |mut d, c| d.put(c))
+  }
+}
+
 impl Hand {
   pub fn new() -> Self {
     Self(Vec::new())
@@ -163,9 +191,8 @@ impl Hand {
     self.pos(card).is_some()
   }
 
-  pub fn play(&mut self, rank: i64, suit: Suit) -> Option<Card> {
-    let card = Card::new(rank, suit);
-    let res = self.pos(&card);
+  pub fn play(&mut self, card: &Card) -> Option<Card> {
+    let res = self.pos(card);
     res.map(|idx| self.0.remove(idx))
   }
 

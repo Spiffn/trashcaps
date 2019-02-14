@@ -1,20 +1,123 @@
 use super::card::{Card, Suit};
-use super::deck::{Deck, Hand};
-use super::repl::{Repl, self};
-use crate::impl::collection::CardCollection;
-use crate::impl::game;
+use super::deck::{Deck, Hand, CardCollection};
+use super::event::GameEvent;
+use std::default::Default;
 use std::convert;
 use std::fmt;
-use std::opt;
+use std::ops;
+
+struct Player<'p> {
+  pub name: &'p str,
+  hand: Hand,
+  pub rank: Ranking,
+}
+
+impl<'p> fmt::Display for Player<'p> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}({}): [{}]", self.name, self.hand, self.rank)
+  }
+}
+
+impl<'p> Player<'p> {
+  pub fn new(name: &'p str, hand: Hand) -> Self {
+    Self {
+      name,
+      hand,
+      rank: Ranking::default(),
+    }
+  }
+
+  pub fn has(&self, card: Card) -> bool {
+    self.hand.has(&card)
+  }
+
+  pub fn has_rank(&self, rank: i64) -> bool {
+    Suit::all()
+      .into_iter()
+      .map(|s| Card::new(rank, s))
+      .all(|c| self.hand.has(&c))
+  }
+
+  //gets card of this type if it exists
+  pub fn play(&mut self, card: Card) -> Option<Card> {
+    self.hand.play(card)
+  }
+
+  //gets all card of some rank
+  pub fn play_by_rank(&mut self, rank: i64) -> Option<Deck> {
+    let d: Deck = Suit::all()
+      .into_iter()
+      .filter_map(|s| self.play(Card::new(rank,s)))
+      .collect();
+    if 0 == h.len() {
+      None
+    } else {
+      Some(d)
+    }
+  }
+
+  pub fn add_card(&mut self, card: Card) {
+    self.hand.put(card);
+  }
+
+  pub fn add_pile<P>(&mut self, pile: P) 
+    where P: CardCollection<Card>
+  {
+    self.hand.add(hand);
+  }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GameState {
+pub enum InputType {
+  Start, //waiting on game start/restart confirmation
+  PlayCard, //player needs to play a card
+  SelectPile(usize), //player needs to select a pile from 0..maximum
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GameState<'n, 'p> { // <'names of players, 'player objects>
   Start,   //rankings are undetermined, deal equally and start with 3 of clubs
   Restart, //rankings were determined, President first
-  Turn(usize),
-  Pick(usize),
-  Offer(usize, usize), //lower rank offering (Scum, President)
-  Exchange(usize, usize), //Higher rank conducting exchange (Scum, President)
+  Turn(&'n str),
+  Pick(&'n str, usize), //(player, choices) player must pick 0..choices
+  Offer(&'p Player<'n>, &'p Player<'n>), //lower rank offering (Scum, President)
+  Exchange(&'p Player<'n>, &'p Player<'n>), //Higher rank conducting exchange (Scum, President)
+}
+
+impl<'p> fmt::Display for GameState<'p> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      GameState::Start => write!(f, "Game has yet to begin."),
+      GameState::Restart => write!(f, "Game awaiting restart"),
+      GameState::Turn(p) => write!(f, "It's {}'s turn.", p),
+      GameState::Pick(p, _) => write!(f, "{} is picking.", p),
+      GameState::Offer(giver, taker) => write!(f,
+        "Waiting on {}({})'s offer to {}({}).",
+        giver.name,
+        giver.rank,
+        taker.name,
+        taker.rank
+      ),
+      GameState::Exchange(giver, taker) => write!(f,
+        "Waiting on {}({})'s response to {}({})'s offer.",
+        taker.name,
+        taker.rank,
+        giver.name,
+        giver.rank
+      ),
+    }
+  }
+}
+
+impl<'p> GameState<'p> {
+  pub fn prompt(&self) -> InputType {
+    use GameState;
+    match self {
+      Start | Restart => InputType::Start,
+      Turn(_) | Offer(_) | Exchange(_) => InputType::PlayCard,
+      Pick(_, max) => InputType::SelectPile(max),
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -36,54 +139,38 @@ impl fmt::Display for Ranking {
   }
 }
 
-#[derive(Debug)]
-pub enum GameStatOpt {
-  Players,
-  GameState,
+impl Default for Ranking {
+  fn default() -> Self {
+    Ranking::Citizen
+  }
 }
 
 #[derive(Debug)]
-pub enum GameStatRes {
-}
-
-#[derive(Debug)]
-pub struct Game<'players, S: convert::AsRef<str>> {
-  players: &'players [S],
-  hands: Vec<Hand>,
-  ranking: Vec<Ranking>,
+pub struct Game<'p> {
+  players: Vec<Player<'p>>,
   state: GameState,
   pile: Deck,
-  events: Vec<GameEvent<'players>>,
+  selection: Hand,
+  events: Vec<GameEvent<'p>>,
 }
 
-impl<'players, S> Iterator for Game<'players, S> {
-  fn next(&mut self) -> Option<Self::Item> {
-    unimplemented!();
+impl<'p> fmt::Display for Game<'p> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    for p in self.players.iter() {
+      writeln!(f, "{}", p)?;
+    }
+    writeln!(f, "{}", self.state)?;
+    writeln!(f, "{}", self.state.prompt())
   }
 }
 
-impl<'players, S> game::Game for Game<'players, S> {
-  type Turn: Repl;
-  type StatOpt: GameStatOpt;
-  type StatOut: 
-}
+impl<'p> Game<'p> {
+  pub fn prompt(&self) -> InputType {
+    self.state.prompt()
+  }
 
-impl<'players, S> Game<'players, S>
-where
-  S: convert::AsRef<str>,
-{
   pub fn is_over(&self) -> bool {
     self.state == GameState::Restart
-  }
-
-  pub fn get_current_player(&self) -> Option<&'players str> {
-    match self.state {
-      GameState::Turn(idx)
-      | GameState::Pick(idx)
-      | GameState::Offer(idx, _)
-      | GameState::Exchange(_, idx) => Some(self.players[idx].as_ref()),
-      _ => None,
-    }
   }
 
   pub fn start(&mut self) -> Result<Vec<String>, String> {
@@ -107,19 +194,11 @@ where
     Ok(self.flush_events())
   }
 
-  //get current game state as String
-  pub fn stat(&self, opt: GameStatOpt) -> String {
-    match opt {
-      GameStatOpt::Players => self.stat_players(),
-      GameStatOpt::GameState => self.stat_gamestate(),
-    }
-  }
-
   pub fn play(
     &mut self,
-    player_str: &str,
-    hand_str: &[&str],
-  ) -> Result<Vec<String>, String> {
+    player_idx: usize,
+    hand_str: &[Card],
+  ) -> Result<Vec<GameEvent>, String> {
     //validate player
     //- exists
     //validate cards
@@ -130,22 +209,19 @@ where
 
     //execute play->events
     //otherwise->errorstr
-    let player_i = self
-      .players
-      .iter()
-      .position(|p| p.as_ref() == player_str)
-      .ok_or(format!("Invalid Player {}!", player_str))?;
-    let played: Deck = self.validate_cards()?;
-    if played.is_empty() {
-      return Err(String::from("No matchable cards!"));
-    }
+    unimplemented!();
   }
 
-  pub fn init(players: &'players [S]) -> Result<Self, String>
-  where
-    S: convert::AsRef<str>,
-  {
-    let num_players = players.len();
+  pub fn select(
+    &mut self,
+    player_idx: usize,
+    selection: usize) -> Result<Vec<GameEvent>, String> {
+
+  }
+
+  pub fn init(names: &'p str) -> Result<Self, String> {
+    let mut players = Vec::new();
+    let num_players = names.len();
     if num_players < 2 {
       return Err(String::from("There is no lone Capitalism."));
     }
@@ -158,63 +234,13 @@ where
       hands.push(Hand::new());
     });
 
-    let suits = [Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs];
-
     Ok(Self {
-      players,
-      hands,
-      ranking,
+      players ,
       state: GameState::Start,
-      pile: Deck::from_range(1..14, &suits),
+      pile: Deck::from_range(1..14, &Suit::all()[..]),
+      selection: Hand::new(),
       events: Vec::new(),
     })
-  }
-
-  fn stat_gamestate(&self) -> String {
-    match self.state {
-      GameState::Start => String::from("Game has yet to begin."),
-      GameState::Restart => String::from("Game awaiting restart"),
-      GameState::Turn(idx) => {
-        format!("It's {}'s Turn.", self.players[idx].as_ref())
-      }
-      GameState::Pick(idx) => format!(
-        "{} {} is Picking.",
-        self.ranking[idx],
-        self.players[idx].as_ref()
-      ),
-      GameState::Offer(giver_i, taker_i) => format!(
-        "Waiting on {}'s offer between {} and {}.",
-        self.ranking[giver_i],
-        self.players[giver_i].as_ref(),
-        self.players[taker_i].as_ref()
-      ),
-      GameState::Exchange(giver_i, taker_i) => format!(
-        "Waiting on {}'s exchange between {} and {}.",
-        self.ranking[taker_i],
-        self.players[giver_i].as_ref(),
-        self.players[taker_i].as_ref()
-      ),
-    }
-  }
-
-  fn stat_players(&self) -> String {
-    self
-      .players
-      .iter()
-      .zip(self.hands.iter())
-      .zip(self.ranking.iter())
-      .map(|((name, hand), rank)| {
-        format!("  {} ({}): {}", name.as_ref(), rank, hand)
-      })
-      .fold(String::new(), |s, player| format!("{}\n{}", s, player))
-  }
-
-  fn flush_events(&mut self) -> Vec<String> {
-    self
-      .events
-      .drain(..)
-      .map(|evt| format!("{}", evt))
-      .collect()
   }
 
   fn initial_deal(&mut self) -> usize {
@@ -285,8 +311,5 @@ where
         }
       })
       .collect()
-  }
-
-  fn exec(&mut self, player_i: usize, cards: Deck) {
   }
 }

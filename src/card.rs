@@ -22,6 +22,12 @@ impl fmt::Display for Suit {
   }
 }
 
+impl Suit {
+  pub fn all() -> Vec<Self> {
+    vec![Suit::Spades, Suit::Hearts, Suit::Clubs, Suit::Diamonds]
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Card {
   suit: Suit,
