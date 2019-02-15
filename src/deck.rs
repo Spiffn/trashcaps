@@ -3,7 +3,7 @@ use std::convert::AsRef;
 use std::fmt;
 use std::ops;
 use std::iter;
-use std::vec;
+use std::default::Default;
 
 use super::card::{Card, Suit};
 
@@ -45,6 +45,7 @@ impl fmt::Display for Deck {
   }
 }
 
+/* REQUIRED */
 impl AsRef<[Card]> for Deck {
   fn as_ref(&self) -> &[Card] {
     self.0.as_ref()
@@ -60,12 +61,21 @@ impl CardCollection<Card> for Deck {
   }
 }
 
-impl iter::IntoIterator for Deck {
+/* OTHER TRAITS */
+impl iter::Iterator for Deck {
   type Item = Card;
-  type IntoIter = vec::IntoIter<Self::Item>;
+  fn next(&mut self) -> Option<Self::Item> {
+    self.draw()
+  }
+}
 
-  fn into_iter(self) -> Self::IntoIter {
-    self.0.into_iter()
+impl iter::ExactSizeIterator for Deck {
+  fn len(&self) -> usize {
+    self.0.len()
+  }
+
+  fn is_empty(&self) -> bool {
+    0 == self.0.len()
   }
 }
 
@@ -98,14 +108,6 @@ impl Deck {
     }
     deck.shuffle();
     deck
-  }
-
-  pub fn len(&self) -> usize {
-    self.0.len()
-  }
-
-  pub fn is_empty(&self) -> bool {
-    self.0.is_empty()
   }
 
   pub fn top(&self) -> Option<&Card> {
@@ -179,6 +181,12 @@ impl fmt::Display for Hand {
 impl iter::FromIterator<Card> for Hand {
   fn from_iter<I: IntoIterator<Item=Card>>(iter: I) -> Self {
     iter.fold(Hand::new(), |mut d, c| d.put(c))
+  }
+}
+
+impl Default for Hand {
+  fn default() -> Self {
+    Hand::new()
   }
 }
 

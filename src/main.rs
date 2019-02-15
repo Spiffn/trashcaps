@@ -4,11 +4,12 @@ mod event;
 mod game;
 mod ui;
 
-use caps::game::{Game, GameStatOpt};
+use game::Game;
+use event::GameEvent;
 use regex::Regex;
 
-fn print_events(mut events: Vec<String>) {
-  events.drain(..).for_each(|evt| println!("{}", evt));
+fn print_events(mut events: Vec<GameEvent>) {
+  events.into_iter().for_each(|evt| println!("{}", evt));
 }
 
 fn tokenize<'input>(

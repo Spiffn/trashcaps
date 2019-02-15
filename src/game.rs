@@ -19,10 +19,10 @@ impl<'p> fmt::Display for Player<'p> {
 }
 
 impl<'p> Player<'p> {
-  pub fn new(name: &'p str, hand: Hand) -> Self {
+  pub fn new(name: &'p str) -> Self {
     Self {
       name,
-      hand,
+      hand: Hand::default(),
       rank: Ranking::default(),
     }
   }
@@ -44,15 +44,15 @@ impl<'p> Player<'p> {
   }
 
   //gets all card of some rank
-  pub fn play_by_rank(&mut self, rank: i64) -> Option<Deck> {
-    let d: Deck = Suit::all()
+  pub fn play_by_rank(&mut self, rank: i64) -> Option<Hand> {
+    let h: Hand = Suit::all()
       .into_iter()
       .filter_map(|s| self.play(Card::new(rank,s)))
       .collect();
     if 0 == h.len() {
       None
     } else {
-      Some(d)
+      Some(h)
     }
   }
 
@@ -67,11 +67,42 @@ impl<'p> Player<'p> {
   }
 }
 
+#[derive(Debug)]
+pub enum Input<'in> {
+  //confirm (re)start game
+  Begin, 
+  //[optional]player + one or more possible cards.  No player implies current player
+  PlayCard(Option<&'in str>, Vec<Card>),
+  //player selection
+  Selection(&'in str, usize), 
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputType {
   Start, //waiting on game start/restart confirmation
   PlayCard, //player needs to play a card
   SelectPile(usize), //player needs to select a pile from 0..maximum
+}
+
+impl InputType {
+  pub fn validate(&self, input: &Input) -> bool {
+    use InputType;
+    //validation of enum contents is left to Game instead.
+    match self {
+      Start => match input {
+        Input::Begin => true,
+        _ => false,
+      },
+      PlayCard => match input {
+        Input::PlayCard(_,_) => true,
+        _ => false,
+      },
+      SelectPile(max) => match input {
+        Input::Selection(_) => true,
+        _ => false,
+      }
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +182,6 @@ pub struct Game<'p> {
   state: GameState,
   pile: Deck,
   selection: Hand,
-  events: Vec<GameEvent<'p>>,
 }
 
 impl<'p> fmt::Display for Game<'p> {
@@ -173,32 +203,11 @@ impl<'p> Game<'p> {
     self.state == GameState::Restart
   }
 
-  pub fn start(&mut self) -> Result<Vec<String>, String> {
-    match self.state {
-      GameState::Start => {
-        self.events.push(GameEvent::Start);
-        let first_player_i = self.initial_deal();
-        self.state = GameState::Turn(first_player_i);
-      }
-      GameState::Restart => {
-        self.events.push(GameEvent::StartPick);
-        let pres_i = self
-          .ranking
-          .iter()
-          .position(|&rank| rank == Ranking::President)
-          .expect("Anarchy! No Presidents!");
-        self.state = GameState::Pick(pres_i);
-      }
-      _ => return Err(String::from("Can't call start() at this time")),
+  pub fn play(&mut self, input: Input) -> Result<Vec<GameEvent>, String> {
+    if !self.prompt().validate(&input) {
+      return Err(String::from("Invalid Input"));
     }
-    Ok(self.flush_events())
-  }
 
-  pub fn play(
-    &mut self,
-    player_idx: usize,
-    hand_str: &[Card],
-  ) -> Result<Vec<GameEvent>, String> {
     //validate player
     //- exists
     //validate cards
@@ -209,64 +218,86 @@ impl<'p> Game<'p> {
 
     //execute play->events
     //otherwise->errorstr
-    unimplemented!();
+
+    let mut evt = Vec::new();
+    match self.state {
+      GameState::Start => {
+        evt.push(GameEvent::Start);
+        let first_player_i = self.initial_deal();
+        self.state = GameState::Turn(first_player_i);
+      },
+      GameState::Restart => {
+        evt.push(GameEvent::StartPick);
+        let pres_i = self
+          .players
+          .iter()
+          .position(|&player| player.rank == Ranking::President)
+          .expect("Anarchy! No Presidents!");
+        self.state = GameState::Pick(pres_i);
+      },  
+      GameState::Turn(p) => {
+      },
+      GameState::Pick(p, usize),
+      GameState::Offer(&'p Player<'n>, &'p Player<'n>),
+      GameState::Exchange(&'p Player<'n>, &'p Player<'n>), 
+    }
   }
 
-  pub fn select(
-    &mut self,
-    player_idx: usize,
-    selection: usize) -> Result<Vec<GameEvent>, String> {
-
-  }
-
-  pub fn init(names: &'p str) -> Result<Self, String> {
+  pub fn new(names: &'p str) -> Result<Self, String> {
     let mut players = Vec::new();
     let num_players = names.len();
     if num_players < 2 {
       return Err(String::from("There is no lone Capitalism."));
     }
 
-    let mut ranking = Vec::with_capacity(num_players);
-    let mut hands = Vec::with_capacity(num_players);
-
-    (0..num_players).for_each(|_| {
-      ranking.push(Ranking::Citizen);
-      hands.push(Hand::new());
-    });
+    names
+      .iter()
+      .for_each(|nm| {
+        players.push(Player::new(nm));
+      });
 
     Ok(Self {
-      players ,
+      players,
       state: GameState::Start,
       pile: Deck::from_range(1..14, &Suit::all()[..]),
       selection: Hand::new(),
-      events: Vec::new(),
     })
   }
 
-  fn initial_deal(&mut self) -> usize {
+  fn initial_deal(&mut self) -> &'p str {
     let num_players = self.players.len();
     let num_cards = self.pile.len();
     let chunks = num_cards / num_players;
-    let leftovers = num_cards % num_players;
 
     //add deck to hands
-    let hands_iter = self.hands.iter_mut();
-    for h in hands_iter {
-      h.add(self.pile.deal(chunks).expect("Ran out of chunks!"));
-    }
+    self
+      .players
+      .iter_mut()
+      .zip(pile.deal_iter())
+      .for_each(|p, pile| {
+        p.add_pile(
+          self
+            .pile
+            .deal(chunks)
+            .expect("Ran out of chunks!"));
+      });
 
     //add leftovers
-    (0..leftovers).for_each(|i| {
-      self.hands[i].put(self.pile.draw().expect("Ran out of leftovers!"));
-    });
+    self.
+      .pile
+      .zip(self.players.iter_mut())
+      .for_each(|(c, p)| {
+        p.put(c);
+      });
 
     //find first player
     let start_card = Card::new(3, Suit::Clubs);
     self
-      .hands
+      .players
       .iter()
-      .position(|h| h.has(&start_card))
+      .find(|h| h.has(&start_card))
       .expect("No 3 of Clubs!")
+      .name
   }
 
   fn validate_cards(&self, player_i: usize, hand_str: &[&str])
