@@ -199,9 +199,16 @@ impl Hand {
     self.pos(card).is_some()
   }
 
-  pub fn play(&mut self, card: &Card) -> Option<Card> {
-    let res = self.pos(card);
-    res.map(|idx| self.0.remove(idx))
+  pub fn play(&mut self, idx: usize) -> Option<Card> {
+    if self.0.get(idx).is_some() {
+      Some(self.0.remove(idx))
+    } else {
+      None
+    }
+  }
+
+  pub fn cards(&self) -> std::slice::Iter<Card> {
+    self.0.iter()
   }
 
   fn pos(&self, card: &Card) -> Option<usize> {
