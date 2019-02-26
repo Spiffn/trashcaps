@@ -10,18 +10,15 @@ use super::card::{Card, Suit};
 //this trait defines CardCollection as compatible with all other CardCollections
 //assuming that the card C is the same.
 //to_vec is just there so an auto impl drain() is possible.
-pub trait CardCollection<C>: AsRef<[C]> {
-  fn put(&mut self, card: C); //add card to collection
-  fn to_vec(self) -> Vec<C>;
-
-  fn add(&mut self, other: impl CardCollection<C>) {
-    for card in other.to_vec().drain(..) {
+pub trait CardCollection: iter::IntoIter<Item=Card> {
+  fn put(&mut self, card: Card); //add card to collection
+  fn merge(&mut self, other: impl CardCollection<Card>) {
+    for card in other {
       self.put(card);
     }
   }
 }
 
-#[derive(Debug)]
 pub struct Deck(Vec<Card>);
 
 impl fmt::Display for Deck {
@@ -45,37 +42,18 @@ impl fmt::Display for Deck {
   }
 }
 
-/* REQUIRED */
-impl AsRef<[Card]> for Deck {
-  fn as_ref(&self) -> &[Card] {
-    self.0.as_ref()
+impl iter::IntoIter for Deck {
+  type Item = Card;
+  type IntoIter = std::vec::IntoIter<Card>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    self.0.into_iter()
   }
 }
 
 impl CardCollection<Card> for Deck {
   fn put(&mut self, card: Card) {
     self.0.push(card);
-  }
-  fn to_vec(self) -> Vec<Card> {
-    self.0
-  }
-}
-
-/* OTHER TRAITS */
-impl iter::Iterator for Deck {
-  type Item = Card;
-  fn next(&mut self) -> Option<Self::Item> {
-    self.draw()
-  }
-}
-
-impl iter::ExactSizeIterator for Deck {
-  fn len(&self) -> usize {
-    self.0.len()
-  }
-
-  fn is_empty(&self) -> bool {
-    0 == self.0.len()
   }
 }
 
@@ -97,7 +75,7 @@ impl Deck {
     Self(Vec::new())
   }
 
-  //given rank range and collection of suits, return a shuffled Deck
+  //given rank range and collection of suits, return a Deck
   //of combinatorial cards of all possible ranks and suits
   pub fn from_range(ranks: ops::Range<i64>, suits: &[Suit]) -> Self {
     let mut deck = Self::empty();
@@ -106,7 +84,6 @@ impl Deck {
         deck.put(Card::new(i, *s));
       }
     }
-    deck.shuffle();
     deck
   }
 
@@ -118,10 +95,38 @@ impl Deck {
     self.0.pop()
   }
 
-  //if possible, moves [count] cards from Stack
-  //if not possible, returns None
-  pub fn deal(&mut self, count: usize) -> Option<Self> {
-    let end = self.len();
+  /* deal()
+   * Tries its best to return a Vec of Hands
+   * will return empty vecs if count too high
+   */
+  pub fn deal(self, count: usize) -> Vec<Hand> {
+    unimplemented!();
+    self.shuffle();
+
+    let portion: usize = match count {
+      0 | 1 => 1,
+      large if large >= self.len() => self.len(),
+      chunk => self.len() / chunk,
+    };
+
+    if portion == 1 {
+      vec![self]
+    } else {
+      let mut res = self
+        .0
+        .into_iter()
+        .enumerate()
+        .fold(Vec::new(), |mut v, (i, c)| {
+          if 0 == i % portion {
+            v.push();
+          }
+        });
+      (0..count - res.len()).for_each(|| {
+        res.push(Hand::new());
+      });
+    }
+
+    let end = if self.len();
     if end < count {
       None
     } else {
@@ -137,12 +142,14 @@ impl Deck {
 
 //A strictly ordered set of Cards for easy searching.
 //Use Deck if order doesn't matter.
-#[derive(Debug)]
 pub struct Hand(Vec<Card>);
 
-impl AsRef<[Card]> for Hand {
-  fn as_ref(&self) -> &[Card] {
-    self.0.as_ref()
+impl iter::IntoIter for Hand {
+  type Item = Card;
+  type IntoIter = std::vec::IntoIter<Card>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    self.0.into_iter()
   }
 }
 
@@ -150,10 +157,6 @@ impl CardCollection<Card> for Hand {
   fn put(&mut self, card: Card) {
     self.0.push(card);
     self.0.sort_unstable();
-  }
-
-  fn to_vec(self) -> Vec<Card> {
-    self.0
   }
 }
 
@@ -190,6 +193,20 @@ impl Default for Hand {
   }
 }
 
+impl ops::Index<u64> for Hand {
+  type Output: [Card];
+
+  fn index(&self, rank: u64) -> &Self::Output {
+  }
+}
+
+impl ops::Index<Suit> for Hand {
+  type Output: [Card];
+
+  fn index(&self, suit: Suit) -> &Self::Output {
+  }
+}
+
 impl Hand {
   pub fn new() -> Self {
     Self(Vec::new())
@@ -199,11 +216,21 @@ impl Hand {
     self.pos(card).is_some()
   }
 
-  pub fn play(&mut self, idx: usize) -> Option<Card> {
-    if self.0.get(idx).is_some() {
-      Some(self.0.remove(idx))
-    } else {
+  /*
+   * essentially an intersection between the presented card slice
+   * and what is in the hand
+   */
+  pub fn play(&mut self, selection: &[Card]) -> Option<Hand> {
+    let played: Hand = selection
+      .iter()
+      .filter_map(|c| {
+        self.pos(c).map(self.take)
+      })
+      .collect();
+    if played.is_empty() {
       None
+    } else {
+      Some(played)
     }
   }
 
@@ -211,7 +238,15 @@ impl Hand {
     self.0.iter()
   }
 
+  pub fn is_empty(&self) -> bool {
+    0 == self.0.len()
+  }
+
   fn pos(&self, card: &Card) -> Option<usize> {
     self.0.binary_search(card).ok()
+  }
+
+  fn take(&mut self, idx: usize) -> Option<Card> {
+    self.0.remove(idx)
   }
 }
