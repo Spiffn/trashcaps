@@ -1,5 +1,7 @@
+use std::fmt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Ranking {
+pub enum Ranking {
   President,
   VicePresident,
   Citizen,

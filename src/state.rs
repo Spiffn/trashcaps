@@ -14,6 +14,10 @@ pub enum GameState { // <'names of players, 'player objects>
 }
 
 impl GameState {
+  pub fn new() -> Self {
+    GameState::Start
+  }
+
   pub fn next(self) -> Self {
     use GameState::*;
     match self {
@@ -31,7 +35,7 @@ impl iter::IntoIterator for GameState {
   type IntoIter = GameStateIterator;
 
   fn into_iter(self) -> Self::IntoIter {
-    GameStateIterator { current: self }
+    GameStateIterator(self)
   }
 }
 
@@ -40,7 +44,7 @@ pub struct GameStateIterator(GameState);
 impl iter::Iterator for GameStateIterator {
   type Item = GameState;
 
-  fn next(&mut self) -> Option<Item> {
+  fn next(&mut self) -> Option<Self::Item> {
     self.0 = self.0.next();
     Some(self.0)
   }

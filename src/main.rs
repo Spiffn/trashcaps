@@ -1,67 +1,79 @@
 mod card;
 mod deck;
 mod event;
-mod game;
+mod rank;
+mod state;
+mod player;
 mod ui;
 
-use game::Game;
-use event::GameEvent;
 use regex::Regex;
 
-fn print_events(mut events: Vec<GameEvent>) {
-  events.into_iter().for_each(|evt| println!("{}", evt));
-}
+use player::Player;
+use state::GameState;
+use card::{Suit, Card};
+use deck::{Deck, Hand};
 
-fn tokenize<'input>(
-  play: &'input str,
-) -> Result<(Option<&'input str>, Vec<&'input str>), ()> {
+fn tokenize(
+  names: &str,
+  players: &[Player],
+  play: &str,
+) -> Result<(Option<usize>, Hand), ()> {
   // [/as <player name>] <card1>,<card2>,...
   let re = Regex::new(
     r"^(?:/as\s*(\S+)\s+)?((?:\d+[shcdSHCD♠♥♣♦*],\s*)*\d+[shcdSHCD♠♥♣♦*])$",
   )
   .expect("Invalid Tokenizer Regex!");
-  let txt = play.trim();
 
-  let captures = re.captures(txt).ok_or(())?;
-  let players_match = captures.get(1).map(|m| m.as_str());
+  let captures = re.captures(play.trim()).ok_or(())?;
+  let player_token: &str = captures.get(1).ok_or(())?.as_str();
+
+  let players_opt: Option<usize> = names
+    .iter()
+    .position(|name| name == player_token);
+
   let cards_match = captures.get(2).ok_or(())?;
-  Ok((players_match, cards_match.as_str().split(',').collect()))
+  let card_selection = cards_match
+    .as_str()
+    .split(',')
+    .map(|c_str| c_str.trim())
+    .fold(Hand::new(), |mut h, c_str| {
+      if let Ok(c) = Card::try_from(c_str) {
+        h.put(c);
+      } else {
+        let rank: i64 = Regex::new(r"^(\d+)\*$")
+          .expect("Invalid * regex!")
+          .captures(c_str)
+          .expect("Impossible card format")
+          .get(1)
+          .expect("Impossible card format")
+          .as_str()
+          .parse();
+
+        /* Create all possible cards of this rank */
+        Suit::all()
+          .iter()
+          .map(|s| Card::new(rank, s))
+          .for_each(|c| {
+            h.put(c);
+          });
+      }
+      h
+    });
+  Ok((players_opt, card_selection))
 }
 
 fn main() {
-  const PLAYERS: [&str; 3] = ["Lawrence", "Timothy", "James"];
+  const PLAYERNUM: usize = 3;
+  const PLAYERNAMES: [&str; PLAYERNUM] = ["Lawrence", "Timothy", "James"];
 
-  let mut game = Game::init(&PLAYERS).unwrap_or_else(|err| panic!("{}", err));
-  let mut turn = 0u32;
+  let mut players: Vec<Player> = (0..PLAYERNUM)
+    .fold(Vec::with_capacity(PLAYERNUM), |mut p| {
+      p.push(Player::new())
+    });
+  let mut state = GameState::new();
+  let mut turn: usize = 0;
+
   loop {
-    print_events(game.start().unwrap_or_else(|err| panic!("{}", err)));
-    while !game.is_over() {
-      println!("TURN {}", turn);
-      println!("-----------");
-      println!("{}", game.stat(GameStatOpt::Players));
-      println!("{}", game.stat(GameStatOpt::GameState));
-      let current_player =
-        game.get_current_player().expect("No current player?");
-      loop {
-        //input loop for a single turn
-        let play = ui::prompt("TRASHCAPS>>").expect("IO Error");
-        let play_tok_res = tokenize(&play);
-        if let Ok((player, cards)) = play_tok_res {
-          let player_name = player.unwrap_or(current_player);
-          let evt_opt = game.play(player_name, &cards[..]);
-          if let Ok(events) = evt_opt {
-            print_events(events);
-            break;
-          } else if let Err(mesg) = evt_opt {
-            println!("{}", mesg);
-          }
-        } else if play_tok_res.is_err() {
-          println!("Input could not be parsed.");
-        }
-      }
-      turn += 1;
-    }
-
     if !ui::yesno("Continue?").expect("IO Error") {
       println!("Goodbye!");
       break;

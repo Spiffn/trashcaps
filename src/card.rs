@@ -1,5 +1,4 @@
 use regex::Regex;
-use std::convert;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -45,24 +44,32 @@ impl Card {
     Self { rank, suit }
   }
 
+  pub fn is_rank(&self, rank: &i64) -> bool {
+    self.rank == rank
+  }
+
+  pub fn is_suit(&self, suit: &Suit) -> bool {
+    self.suit == suit
+  }
+
   pub fn try_from(s: &str) -> Result<Self, ()> {
     //must be in the form '<rank><suit>'
     // suit can be unicode or first character (i.e. 13C or 1♠)
-    let re = Regex::new(r"^\s*(\d+)([shcdSHCD♠♥♣♦*])\s*$")
+    let re = Regex::new(r"^\s*(\d+)([shcdSHCD♠♥♣♦])\s*$")
       .expect("Invalid Regex!");
     let captures = re.captures(s).ok_or(())?;
     let rank_match = captures.get(1).ok_or(())?;
     let suit_match = captures.get(2).ok_or(())?;
 
     let rank_str: &str = rank_match.as_str();
-    let suit_str: String = suit_match.as_str().to_uppercase();
+    let suit_str: &str = suit_match.as_str();
 
     let rank: i64 = rank_str.parse().map_err(|_| ())?;
     let suit: Suit = match suit_str {
-      "S" | "♠" => Suit::Spades,
-      "H" | "♥" => Suit::Hearts,
-      "C" | "♣" => Suit::Clubs,
-      "D" | "♦" => Suit::Diamonds,
+      "s" | "S" | "♠" => Suit::Spades,
+      "h" | "H" | "♥" => Suit::Hearts,
+      "c" | "C" | "♣" => Suit::Clubs,
+      "d" | "D" | "♦" => Suit::Diamonds,
       _ => return Err(()),
     };
     Ok(Self::new(rank, suit))

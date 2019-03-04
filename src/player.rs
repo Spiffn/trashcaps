@@ -1,21 +1,15 @@
 use std::fmt;
 
-use card::Card;
-use deck::Hand;
+use crate::card::Card;
+use crate::deck::Hand;
+use crate::rank::Ranking;
 
-#[derive(Debug)]
-struct Player<'p> {
+pub struct Player {
   pub hand: Hand,
   pub rank: Ranking,
 }
 
-impl<'p> fmt::Display for Player<'p> {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}({}): [{}]", self.name, self.hand, self.rank)
-  }
-}
-
-impl<'p> Player<'p> {
+impl Player {
   pub fn new() -> Self {
     Self {
       hand: Hand::default(),
@@ -28,16 +22,15 @@ impl<'p> Player<'p> {
   }
 
   //gets card of this type if it exists
-  pub fn play(&mut self, idx: usize) -> Option<Card> {
-    self.hand.play(idx)
+  pub fn play(&mut self, selection: &[Card]) -> Option<Hand> {
+    self.hand.play(selection)
   }
 
   pub fn add_card(&mut self, card: Card) {
     self.hand.put(card);
   }
 
-  pub fn add_pile<P>(&mut self, pile: P) 
-    where P: CardCollection<Card>
+  pub fn add_hand(&mut self, hand: Hand) 
   {
     self.hand.add(hand);
   }
