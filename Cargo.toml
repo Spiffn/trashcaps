@@ -5,5 +5,5 @@ authors = ["lancewiu"]
 edition = "2018"
 
 [dependencies]
-rand = "0.6.4"
-regex = "1.1.0"
+rand = "0.6.5"
+regex = "1.1.5"
