@@ -41,15 +41,13 @@ pub struct Hand {
     cards: Vec<Card>,
 }
 
-pub enum DealErrors {
+pub enum DealError {
     ZeroHands,
     TooManyHands(usize),
 }
 
-//[IMPLS]
-
-//SUIT
-//RANK
+//impl Suit
+//impl Rank
 impl FromStr for Rank {
     type String;
     fn from_str(value: &str) -> Result<Self, Self::Error> {
@@ -72,7 +70,7 @@ impl FromStr for Rank {
     }
 }
 
-//HAND
+//impl Hand
 impl Hand {
     pub fn add(&mut self, card: Card) {
         self.cards.push(card);
@@ -90,8 +88,16 @@ impl Hand {
         cards.iter().all(self.has)
     }
 
+    pub fn pop(&mut self) -> Option<Card> {
+        if !self.is_ordered {
+            self.order();
+        }
+        self.cards.pop()
+    }
+
     fn order(&mut self) {
-        self.cards.sort_unstable();
+        //sorted in reverse order
+        self.cards.sort_unstable_by(|a, b| b.cmp(a));
         self.is_ordered = true;
     }
 }
@@ -99,7 +105,7 @@ impl Hand {
 impl Display for Hand {
     use std::fmt;
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!("{:?}", self.cards)
+        write!(f, "{:?}", self.cards)
     }
 }
 
@@ -109,7 +115,6 @@ impl From<Vec<Card>> for Hand {
     }
 }
 
-//[FUNCTIONS] 
 pub fn deal(hands: usize) -> Result<Vec<Hand>, DealErrors> {
     const SUIT_NUM: usize = 4;
     const RANK_NUM: usize = 13;

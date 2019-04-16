@@ -1,58 +1,66 @@
+pub mod cards;
+mod state;
+
 use std::string::ToString;
-use cards::{self, Hand, Rank, DealErrors};
+use std::fmt::{self, Display};
+use state::{State, StateError};
 
 struct Player {
     name: String,
     ranking: SocialRank,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct SocialRank {
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SocialRank {
     President,
     VicePresident, //unused in this variant
     Citizen(usize), //used for seating later
     Scum,
 }
 
-struct Prev {
-    player: usize,
-    card: Rank,
-    mult: usize,
-}
-
 //Handles pre-game config and post-game changes
-pub struct GameConfig {
+pub struct Config {
     players: Vec<Player>,
-    game_count: usize,
+    initial_game: bool,
 }
-pub enum GameConfigError {
-    NoPlayers,
+pub enum ConfigError {
+    ZeroPlayers,
     TooManyPlayers(usize),
-}
-
-//Regular game loop
-pub struct Game {
-    count: usize, //number of games
-    players: Vec<Player>,
-    hands: Vec<Hand>,
-    current: usize,
-    prev: Option<Prev>, //last name
 }
 
 pub enum Input {
     Play(Vec<Card>),
     Pass,
-    Tax(Card), //President-only action during exchange
-    Status,
-    StatusVerbose,
+    Tax(Card),
 }
 
-pub enum Event {
-    Prompt, //that is, check for input from player
-    End, //end the game or prompt a restart
+pub enum Game {
+    Play(State), //regular card play or pass
+    Tax(State), //only used when president taxes scum
+    End(Config), //used to indicate endgame
+}
+pub enum GameError {
+    InvalidPlay(String),
 }
 
-//[IMPLS]
+pub struct GameStatus {
+    players: &[Player],
+    hands: &[Hand],
+    current_player: &Player,
+}
+
+pub struct ConfigStatus {
+    players: &[Player],
+}
+
+pub enum Status {
+    Game(GameStatus),
+    Config(ConfigStatus),
+    players: Vec<String>,
+    hands: &[Hand],
+    current_player: &Player,
+}
+
 impl Player {
     fn new(name: String) -> Self {
         Player::with_rank(name, SocialRank::Scum)
@@ -64,117 +72,99 @@ impl Player {
             ranking,
         }
     }
+
+    pub fn get_name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn get_ranking(&self) -> &SocialRank {
+        &self.ranking
+    }
 }
-//SOCIALRANK
-//PREV
-impl GameConfig {
+
+impl Display for Player {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        format!("{} [{}]", self.name, self.ranking);
+    }
+}
+
+//impl SocialRank
+
+impl Display for SocialRank {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Config {
     fn from_restart(players: Vec<Player>, count: usize) -> Self {
         Self {
             players,
-            game_count: count.saturating_add(1),
+            initial_game: false,
         }
     }
 
     pub fn new() -> Self {
         Self {
             players: Vec::new(),
-            game_count: 0,
+            initial_game: true,
         }
     }
 
-    pub fn add_player(&mut self, name: String) -> &mut Self {
-        self.players.push(Player::new(name));
+    pub fn add_player(&mut self, name: &str) -> &mut Self {
+        self.players.push(Player::new(String::from(name)));
         self
     }
 
-    pub fn start(self) -> Result<Game, GameConfigError> {
-        if self.initial_game {
-            Game::init(self.players)?
-        } else {
-            Game::reinit(self.players, self.game_count)?
-        }
-    }
-}
-impl ToString for GameConfigError {
-    fn to_string(&self) -> String {
-        match self {
-            GameConfigError::NoPlayers => String::from("Not enough players!"),
-            GameConfigError::TooManyPlayers(count) => format!("Ruleset cannot support {0} players! ({0} > 52)", count),
-        }
-    }
-}
-
-impl Game {
-    fn init(players: Vec<Player>) -> Self {
-        let game = Game::new(players, 0).unwrap_or_else(|err| panic!("{}", err.to_string()));
-        println!("New Game Started!  It is {}'s turn", players.first().name);
-        game.prompt();
-        game
-    }
-
-    fn reinit(players: Vec<Player>, count: usize) -> Self {
-        let game = Game::new(players, count).unwrap_or_else(|err| panic!("{}", err.to_string()));
-        let pres: &Player = players.first();
-        let scum: &Player = players.last();
-        println!("President {}, please offer Scum {} one of your cards.",
-                 pres.name, scum.name);
-        game.prompt();
-        game
-    }
-
-    fn new(players: Vec<Player>) -> Result<Self, GameConfigError> {
-        let hands = card::deal(players_len()).map_err(|e| {
+    pub fn start(self) -> Result<Game, ConfigError> {
+        let state = State::init(self.players).map_err(|e| {
             match e {
-                DealError::ZeroHands => GameConfigError::ZeroPlayers,
-                DealError::TooManyHands(h) => GameConfigError::TooManyPlayers(h),
+                StateError::ZeroPlayers => ConfigError::ZeroPlayers,
+                StateError::TooManyHands(h) => ConfigError::TooManyPlayers(h),
             }
         })?;
-        Ok(Self {
-            players,
-            hands,
-            current: 0,
-            prev: None,
-        })
-    }
-
-    pub fn play(&mut self, input: Input) -> Event {
-        unimplemented!();
-        match input {
-            Input::Play(set) => {
-                //check hand existence for player
-                //remove cards
-                //check empty hand and set socialrank
-                //check endgame
-                //otherwise next turn
-            }
-            Input::Pass => {
-                //Check Prev for clear
-                //Check endgame
-                //otherwise next turn
-            }
-            Input::Tax(card) => {
-                //Check player ranking
-                //move card
-                //repeat turn
-            }
-            Input::Status => {
-                //print turn, rank, and multiple
-            }
-            Input::StatusVerbose => {
-                //print game number
-                //print all players with turn and rankings
-                //print card rank, and multiple
-            }
+        if self.initial_game {
+            Game::Play(state)
+        } else {
+            Game::Tax(state)
         }
     }
 
-    pub fn restart(self) -> GameConfig {
-        println!("Game Restarted!");
-        self.players.sort_unstable_by_key(|p| p.ranking);
-        GameConfig::from_restart(self.players)
+    pub fn status(&self) -> Status {
+        Status {
+            players:
+        }
+    }
+}
+impl ToString for ConfigError {
+    fn to_string(&self) -> String {
+        match self {
+            ConfigError::NoPlayers => String::from("Not enough players!"),
+            ConfigError::TooManyPlayers(count) => format!("Ruleset cannot support {0} players! ({0} > 52)", count),
+        }
+    }
+}
+
+//impl Input
+
+impl Game {
+    pub fn play(&mut self, cards: Vec<Card>) -> Result<Game, GameError> {
+        unimplemented!();
     }
 
-    fn prompt(&self) {
-        print!("CAPITALISM {}>", self.players[self.current].name);
+    pub fn pass(&mut self) -> Game {
+        unimplemented!();
+    }
+
+    pub fn tax(&mut self, card: Card) -> Result<Game, GameError> {
+        unimplemented!();
+        //check appropriate tax
+    }
+
+    pub fn restart(self) -> Config {
+        unimplemented!();
+    }
+
+    pub fn status(&self) -> Status {
     }
 }
